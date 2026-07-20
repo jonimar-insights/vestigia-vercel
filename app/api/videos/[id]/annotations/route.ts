@@ -15,11 +15,10 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 });
   }
 
-  const videoAnnotations = db
+  const videoAnnotations = await db
     .select()
     .from(annotations)
-    .where(eq(annotations.videoId, videoId))
-    .all();
+    .where(eq(annotations.videoId, videoId));
 
   return NextResponse.json(
     videoAnnotations.map((a) => ({
@@ -57,7 +56,7 @@ export async function POST(
     );
   }
 
-  const annotation = db
+  const [annotation] = await db
     .insert(annotations)
     .values({
       videoId,
@@ -68,8 +67,7 @@ export async function POST(
       note: note ?? null,
       createdBy: session?.user?.name ?? "anonymous",
     })
-    .returning()
-    .get();
+    .returning();
 
   return NextResponse.json(
     {
@@ -118,12 +116,11 @@ export async function PUT(
   if (tags != null) updates.tags = JSON.stringify(tags);
   if (note !== undefined) updates.note = note;
 
-  const updated = db
+  const [updated] = await db
     .update(annotations)
     .set(updates)
     .where(eq(annotations.id, annotationId))
-    .returning()
-    .get();
+    .returning();
 
   if (!updated) {
     return NextResponse.json(
@@ -158,7 +155,7 @@ export async function DELETE(
     );
   }
 
-  db.delete(annotations).where(eq(annotations.id, annotationId)).run();
+  await db.delete(annotations).where(eq(annotations.id, annotationId));
 
   return NextResponse.json({ success: true });
 }

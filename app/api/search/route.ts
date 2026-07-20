@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
   const pattern = `%${q}%`;
 
-  const matchedAnnotations = db
+  const matchedAnnotations = await db
     .select({
       type: annotations.id,
       kind: annotations.id,
@@ -30,10 +30,9 @@ export async function GET(request: NextRequest) {
         like(annotations.note, pattern),
         like(annotations.tags, pattern),
       ),
-    )
-    .all();
+    );
 
-  const matchedScenes = db
+  const matchedScenes = await db
     .select({
       videoId: scenes.videoId,
       timestamp: scenes.timestamp,
@@ -46,10 +45,9 @@ export async function GET(request: NextRequest) {
         like(scenes.aiDescription, pattern),
         like(scenes.aiTags, pattern),
       ),
-    )
-    .all();
+    );
 
-  const matchedMoments = db
+  const matchedMoments = await db
     .select({
       videoId: keyMoments.videoId,
       timestamp: keyMoments.timestamp,
@@ -62,8 +60,7 @@ export async function GET(request: NextRequest) {
         like(keyMoments.title, pattern),
         like(keyMoments.description, pattern),
       ),
-    )
-    .all();
+    );
 
   const allVideoIds = new Set<number>();
   for (const a of matchedAnnotations) allVideoIds.add(a.videoId);
@@ -72,8 +69,8 @@ export async function GET(request: NextRequest) {
 
   const videoMap = new Map<number, { id: number; title: string | null; thumbnailUrl: string | null }>();
   for (const vid of allVideoIds) {
-    const v = db.select().from(videos).where(eq(videos.id, vid)).get();
-    if (v) videoMap.set(vid, { id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl });
+    const vRows = await db.select().from(videos).where(eq(videos.id, vid)).limit(1);
+    if (vRows[0]) videoMap.set(vid, { id: vRows[0].id, title: vRows[0].title, thumbnailUrl: vRows[0].thumbnailUrl });
   }
 
   const results: {

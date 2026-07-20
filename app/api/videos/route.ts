@@ -7,32 +7,22 @@ import { auth } from "@/auth";
 import { fetchTranscriptWithFallback } from "@/lib/transcript";
 
 export async function GET() {
-  const allVideos = db.select().from(videos).all();
+  const allVideos = await db.select().from(videos);
 
-  const enriched = allVideos.map((v) => {
-    const annotationCount = db
-      .select({ value: count() })
-      .from(annotations)
-      .where(eq(annotations.videoId, v.id))
-      .get()?.value ?? 0;
-    const sceneCount = db
-      .select({ value: count() })
-      .from(scenes)
-      .where(eq(scenes.videoId, v.id))
-      .get()?.value ?? 0;
-    const momentCount = db
-      .select({ value: count() })
-      .from(keyMoments)
-      .where(eq(keyMoments.videoId, v.id))
-      .get()?.value ?? 0;
-    const hasTranscript = !!db
-      .select()
-      .from(transcripts)
-      .where(eq(transcripts.videoId, v.id))
-      .get();
+  const enriched = await Promise.all(
+    allVideos.map(async (v) => {
+      const annotationCount =
+        (await db.select({ value: count() }).from(annotations).where(eq(annotations.videoId, v.id)))[0]?.value ?? 0;
+      const sceneCount =
+        (await db.select({ value: count() }).from(scenes).where(eq(scenes.videoId, v.id)))[0]?.value ?? 0;
+      const momentCount =
+        (await db.select({ value: count() }).from(keyMoments).where(eq(keyMoments.videoId, v.id)))[0]?.value ?? 0;
+      const hasTranscript =
+        (await db.select().from(transcripts).where(eq(transcripts.videoId, v.id)).limit(1)).length > 0;
 
-    return { ...v, annotationCount, sceneCount, momentCount, hasTranscript };
-  });
+      return { ...v, annotationCount, sceneCount, momentCount, hasTranscript };
+    }),
+  );
 
   return NextResponse.json(enriched);
 }
@@ -51,13 +41,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid YouTube URL" }, { status: 400 });
   }
 
-  const existing = db
-    .select()
-    .from(videos)
-    .where(eq(videos.youtubeId, youtubeId))
-    .get();
-  if (existing) {
-    return NextResponse.json(existing);
+  const existingRows = await db.select().from(videos).where(eq(videos.youtubeId, youtubeId)).limit(1);
+  if (existingRows[0]) {
+    return NextResponse.json(existingRows[0]);
   }
 
   let title: string | null = null;
@@ -77,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
   } catch {}
 
-  const video = db
+  const [video] = await db
     .insert(videos)
     .values({
       youtubeUrl: `https://www.youtube.com/watch?v=${youtubeId}`,
@@ -87,20 +73,17 @@ export async function POST(request: NextRequest) {
       durationSeconds,
       createdBy: session?.user?.name ?? "anonymous",
     })
-    .returning()
-    .get();
+    .returning();
 
   const transcript = await fetchTranscriptWithFallback(youtubeId);
 
   if (transcript && transcript.segments.length > 0) {
-    db.insert(transcripts)
-      .values({
-        videoId: video.id,
-        segments: JSON.stringify(transcript.segments),
-        language: transcript.language,
-        source: transcript.source,
-      })
-      .run();
+    await db.insert(transcripts).values({
+      videoId: video.id,
+      segments: JSON.stringify(transcript.segments),
+      language: transcript.language,
+      source: transcript.source,
+    });
   }
 
   return NextResponse.json(video, { status: 201 });

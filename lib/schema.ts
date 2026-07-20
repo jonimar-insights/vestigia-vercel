@@ -1,7 +1,7 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { pgTable, serial, text, integer, real } from "drizzle-orm/pg-core";
 
-export const users = sqliteTable("users", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name"),
@@ -11,8 +11,8 @@ export const users = sqliteTable("users", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
-export const videos = sqliteTable("videos", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const videos = pgTable("videos", {
+  id: serial("id").primaryKey(),
   youtubeUrl: text("youtube_url").notNull(),
   youtubeId: text("youtube_id").notNull().unique(),
   title: text("title"),
@@ -24,8 +24,8 @@ export const videos = sqliteTable("videos", {
   createdBy: text("created_by").notNull().default("anonymous"),
 });
 
-export const transcripts = sqliteTable("transcripts", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const transcripts = pgTable("transcripts", {
+  id: serial("id").primaryKey(),
   videoId: integer("video_id")
     .notNull()
     .references(() => videos.id, { onDelete: "cascade" }),
@@ -37,8 +37,8 @@ export const transcripts = sqliteTable("transcripts", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
-export const annotations = sqliteTable("annotations", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const annotations = pgTable("annotations", {
+  id: serial("id").primaryKey(),
   videoId: integer("video_id")
     .notNull()
     .references(() => videos.id, { onDelete: "cascade" }),
@@ -56,8 +56,8 @@ export const annotations = sqliteTable("annotations", {
   createdBy: text("created_by").notNull().default("anonymous"),
 });
 
-export const scenes = sqliteTable("scenes", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const scenes = pgTable("scenes", {
+  id: serial("id").primaryKey(),
   videoId: integer("video_id")
     .notNull()
     .references(() => videos.id, { onDelete: "cascade" }),
@@ -71,8 +71,8 @@ export const scenes = sqliteTable("scenes", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
-export const cliplists = sqliteTable("cliplists", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const cliplists = pgTable("cliplists", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
   createdAt: text("created_at")
@@ -84,8 +84,8 @@ export const cliplists = sqliteTable("cliplists", {
   createdBy: text("created_by").notNull().default("anonymous"),
 });
 
-export const clipItems = sqliteTable("clip_items", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const clipItems = pgTable("clip_items", {
+  id: serial("id").primaryKey(),
   cliplistId: integer("cliplist_id")
     .notNull()
     .references(() => cliplists.id, { onDelete: "cascade" }),
@@ -101,8 +101,8 @@ export const clipItems = sqliteTable("clip_items", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
-export const keyMoments = sqliteTable("key_moments", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const keyMoments = pgTable("key_moments", {
+  id: serial("id").primaryKey(),
   videoId: integer("video_id")
     .notNull()
     .references(() => videos.id, { onDelete: "cascade" }),

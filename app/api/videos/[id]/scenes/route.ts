@@ -28,20 +28,20 @@ export async function POST(
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 });
   }
 
-  const video = db.select().from(videos).where(eq(videos.id, videoId)).get();
-  if (!video) {
+  const videoRows = await db.select().from(videos).where(eq(videos.id, videoId)).limit(1);
+  if (!videoRows[0]) {
     return NextResponse.json({ error: "Video not found" }, { status: 404 });
   }
+  const video = videoRows[0];
 
   if (isSceneJobRunning(videoId)) {
     return NextResponse.json({ message: "Scene detection already in progress" });
   }
 
-  const existingScenes = db
+  const existingScenes = await db
     .select()
     .from(scenes)
-    .where(eq(scenes.videoId, videoId))
-    .all();
+    .where(eq(scenes.videoId, videoId));
   if (existingScenes.length > 0) {
     return NextResponse.json({
       message: "Scenes already detected",
@@ -165,7 +165,7 @@ async function runSceneDetection(
         ? (persistedMap.get(scene.thumbnailPath) ?? scene.thumbnailPath)
         : null;
 
-      const inserted = db
+      const [inserted] = await db
         .insert(scenes)
         .values({
           videoId,
@@ -175,8 +175,7 @@ async function runSceneDetection(
           aiTags: aiTag?.tags ? JSON.stringify(aiTag.tags) : null,
           aiConfidence: aiTag?.confidence ?? null,
         })
-        .returning()
-        .get();
+        .returning();
 
       savedScenes.push({
         ...inserted,
@@ -208,11 +207,10 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 });
   }
 
-  const videoScenes = db
+  const videoScenes = await db
     .select()
     .from(scenes)
-    .where(eq(scenes.videoId, videoId))
-    .all();
+    .where(eq(scenes.videoId, videoId));
 
   return NextResponse.json(
     videoScenes.map((s) => ({
@@ -240,7 +238,7 @@ export async function DELETE(
     );
   }
 
-  db.delete(scenes).where(eq(scenes.videoId, videoId)).run();
+  await db.delete(scenes).where(eq(scenes.videoId, videoId));
   cleanupThumbnailsDir(videoId);
 
   return NextResponse.json({ success: true });

@@ -130,11 +130,10 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 });
   }
 
-  const saved = db
+  const saved = await db
     .select()
     .from(keyMoments)
-    .where(and(eq(keyMoments.videoId, videoId), eq(keyMoments.source, "ai-summary")))
-    .all();
+    .where(and(eq(keyMoments.videoId, videoId), eq(keyMoments.source, "ai-summary")));
 
   const moments = saved.map((m) => ({
     id: m.id,
@@ -198,17 +197,17 @@ export async function POST(
     return NextResponse.json({ error: `Groq not reachable: ${msg.slice(0, 200)}` }, { status: 500 });
   }
 
-  const video = db.select().from(videos).where(eq(videos.id, videoId)).get();
-  if (!video) {
+  const videoRows = await db.select().from(videos).where(eq(videos.id, videoId)).limit(1);
+  if (!videoRows[0]) {
     return NextResponse.json({ error: "Video not found" }, { status: 404 });
   }
+  const video = videoRows[0];
 
   // Check for existing saved summary
-  const existing = db
+  const existing = await db
     .select()
     .from(keyMoments)
-    .where(and(eq(keyMoments.videoId, videoId), eq(keyMoments.source, "ai-summary")))
-    .all();
+    .where(and(eq(keyMoments.videoId, videoId), eq(keyMoments.source, "ai-summary")));
 
   if (existing.length > 0 && !regenerate) {
     return NextResponse.json({
@@ -226,16 +225,16 @@ export async function POST(
 
   // If regenerating, delete old ones
   if (regenerate && existing.length > 0) {
-    db.delete(keyMoments)
-      .where(and(eq(keyMoments.videoId, videoId), eq(keyMoments.source, "ai-summary")))
-      .run();
+    await db.delete(keyMoments)
+      .where(and(eq(keyMoments.videoId, videoId), eq(keyMoments.source, "ai-summary")));
   }
 
-  const transcript = db
+  const transcriptRows = await db
     .select()
     .from(transcripts)
     .where(eq(transcripts.videoId, videoId))
-    .get();
+    .limit(1);
+  const transcript = transcriptRows[0] ?? null;
 
   if (!transcript) {
     return NextResponse.json({ error: "No transcript available. Extract transcript first." }, { status: 404 });
@@ -423,7 +422,7 @@ Rules:
   const saved = [];
   for (const m of deduped) {
     const confidence = m.importance === "high" ? 1.0 : m.importance === "medium" ? 0.7 : 0.4;
-    const inserted = db
+    const [inserted] = await db
       .insert(keyMoments)
       .values({
         videoId,
@@ -434,8 +433,7 @@ Rules:
         source: "ai-summary",
         confidence,
       })
-      .returning()
-      .get();
+      .returning();
     saved.push({
       id: inserted.id,
       timestamp: inserted.timestamp,
@@ -469,9 +467,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 });
   }
 
-  db.delete(keyMoments)
-    .where(and(eq(keyMoments.videoId, videoId), eq(keyMoments.source, "ai-summary")))
-    .run();
+  await db.delete(keyMoments)
+    .where(and(eq(keyMoments.videoId, videoId), eq(keyMoments.source, "ai-summary")));
 
   return NextResponse.json({ success: true });
 }

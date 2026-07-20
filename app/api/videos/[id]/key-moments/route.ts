@@ -18,16 +18,16 @@ export async function POST(
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 });
   }
 
-  const video = db.select().from(videos).where(eq(videos.id, videoId)).get();
-  if (!video) {
+  const videoRows = await db.select().from(videos).where(eq(videos.id, videoId)).limit(1);
+  if (!videoRows[0]) {
     return NextResponse.json({ error: "Video not found" }, { status: 404 });
   }
+  const video = videoRows[0];
 
-  const existing = db
+  const existing = await db
     .select()
     .from(keyMoments)
-    .where(eq(keyMoments.videoId, videoId))
-    .all();
+    .where(eq(keyMoments.videoId, videoId));
   if (existing.length > 0) {
     return NextResponse.json({
       message: "Key moments already extracted",
@@ -40,7 +40,7 @@ export async function POST(
   // 1. Extract YouTube chapters
   const chapters = await extractYouTubeChapters(video.youtubeId);
   for (const ch of chapters) {
-    const inserted = db
+    const [inserted] = await db
       .insert(keyMoments)
       .values({
         videoId,
@@ -50,8 +50,7 @@ export async function POST(
         source: "chapter",
         confidence: ch.confidence,
       })
-      .returning()
-      .get();
+      .returning();
     allMoments.push(inserted);
   }
 
@@ -63,7 +62,7 @@ export async function POST(
       (m) => Math.abs(m.timestamp - tm.timestamp) < 3,
     );
     if (!tooClose) {
-      const inserted = db
+      const [inserted] = await db
         .insert(keyMoments)
         .values({
           videoId,
@@ -73,8 +72,7 @@ export async function POST(
           source: "transcript",
           confidence: tm.confidence,
         })
-        .returning()
-        .get();
+        .returning();
       allMoments.push(inserted);
     }
   }
@@ -102,11 +100,10 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 });
   }
 
-  const moments = db
+  const moments = await db
     .select()
     .from(keyMoments)
-    .where(eq(keyMoments.videoId, videoId))
-    .all();
+    .where(eq(keyMoments.videoId, videoId));
 
   return NextResponse.json(moments);
 }
@@ -126,13 +123,12 @@ export async function DELETE(
   const { source } = body as { source?: string };
 
   if (source) {
-    db.delete(keyMoments)
+    await db.delete(keyMoments)
       .where(
         and(eq(keyMoments.videoId, videoId), eq(keyMoments.source, source)),
-      )
-      .run();
+      );
   } else {
-    db.delete(keyMoments).where(eq(keyMoments.videoId, videoId)).run();
+    await db.delete(keyMoments).where(eq(keyMoments.videoId, videoId));
   }
 
   return NextResponse.json({ success: true });

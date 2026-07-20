@@ -14,34 +14,18 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 });
   }
 
-  const video = db.select().from(videos).where(eq(videos.id, videoId)).get();
-  if (!video) {
+  const videoRows = await db.select().from(videos).where(eq(videos.id, videoId)).limit(1);
+  if (!videoRows[0]) {
     return NextResponse.json({ error: "Video not found" }, { status: 404 });
   }
+  const video = videoRows[0];
 
-  const transcript = db
-    .select()
-    .from(transcripts)
-    .where(eq(transcripts.videoId, videoId))
-    .get();
+  const transcriptRows = await db.select().from(transcripts).where(eq(transcripts.videoId, videoId)).limit(1);
+  const transcript = transcriptRows[0] ?? null;
 
-  const videoAnnotations = db
-    .select()
-    .from(annotations)
-    .where(eq(annotations.videoId, videoId))
-    .all();
-
-  const videoScenes = db
-    .select()
-    .from(scenes)
-    .where(eq(scenes.videoId, videoId))
-    .all();
-
-  const videoKeyMoments = db
-    .select()
-    .from(keyMoments)
-    .where(eq(keyMoments.videoId, videoId))
-    .all();
+  const videoAnnotations = await db.select().from(annotations).where(eq(annotations.videoId, videoId));
+  const videoScenes = await db.select().from(scenes).where(eq(scenes.videoId, videoId));
+  const videoKeyMoments = await db.select().from(keyMoments).where(eq(keyMoments.videoId, videoId));
 
   return NextResponse.json({
     ...video,
@@ -71,11 +55,11 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 });
   }
 
-  db.delete(annotations).where(eq(annotations.videoId, videoId)).run();
-  db.delete(keyMoments).where(eq(keyMoments.videoId, videoId)).run();
-  db.delete(scenes).where(eq(scenes.videoId, videoId)).run();
-  db.delete(transcripts).where(eq(transcripts.videoId, videoId)).run();
-  db.delete(videos).where(eq(videos.id, videoId)).run();
+  await db.delete(annotations).where(eq(annotations.videoId, videoId));
+  await db.delete(keyMoments).where(eq(keyMoments.videoId, videoId));
+  await db.delete(scenes).where(eq(scenes.videoId, videoId));
+  await db.delete(transcripts).where(eq(transcripts.videoId, videoId));
+  await db.delete(videos).where(eq(videos.id, videoId));
 
   return NextResponse.json({ success: true });
 }

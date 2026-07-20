@@ -13,28 +13,28 @@ export async function GET(
     return NextResponse.json({ error: "Invalid cliplist ID" }, { status: 400 });
   }
 
-  const list = db.select().from(cliplists).where(eq(cliplists.id, listId)).get();
-  if (!list) {
+  const listRows = await db.select().from(cliplists).where(eq(cliplists.id, listId)).limit(1);
+  if (!listRows[0]) {
     return NextResponse.json({ error: "Cliplist not found" }, { status: 404 });
   }
+  const list = listRows[0];
 
-  const items = db
+  const items = await db
     .select()
     .from(clipItems)
     .where(eq(clipItems.cliplistId, listId))
-    .orderBy(desc(clipItems.createdAt))
-    .all();
+    .orderBy(desc(clipItems.createdAt));
 
   // Attach video info to each item
   const videoIds = [...new Set(items.map((i) => i.videoId))];
   const videoMap = new Map<number, { title: string | null; thumbnailUrl: string | null }>();
   for (const vid of videoIds) {
-    const v = db
+    const vRows = await db
       .select({ title: videos.title, thumbnailUrl: videos.thumbnailUrl })
       .from(videos)
       .where(eq(videos.id, vid))
-      .get();
-    if (v) videoMap.set(vid, v);
+      .limit(1);
+    if (vRows[0]) videoMap.set(vid, vRows[0]);
   }
 
   const itemsWithVideo = items.map((item) => ({
@@ -57,7 +57,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid cliplist ID" }, { status: 400 });
   }
 
-  db.delete(cliplists).where(eq(cliplists.id, listId)).run();
+  await db.delete(cliplists).where(eq(cliplists.id, listId));
   return NextResponse.json({ success: true });
 }
 
@@ -78,7 +78,7 @@ export async function PATCH(
   if (name !== undefined) updateData.name = name.trim();
   if (description !== undefined) updateData.description = description?.trim() || null;
 
-  db.update(cliplists).set(updateData).where(eq(cliplists.id, listId)).run();
-  const updated = db.select().from(cliplists).where(eq(cliplists.id, listId)).get();
-  return NextResponse.json(updated);
+  await db.update(cliplists).set(updateData).where(eq(cliplists.id, listId));
+  const updatedRows = await db.select().from(cliplists).where(eq(cliplists.id, listId)).limit(1);
+  return NextResponse.json(updatedRows[0]);
 }

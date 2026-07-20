@@ -1,21 +1,7 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
-const globalForDb = globalThis as unknown as { db: ReturnType<typeof createDb> };
+const sql = neon(process.env.DATABASE_URL!);
 
-function createDb() {
-  const sqlite = new Database("data/app.db");
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("busy_timeout = 5000");
-  sqlite.pragma("synchronous = NORMAL");
-  sqlite.pragma("cache_size = -64000");
-  sqlite.pragma("foreign_keys = ON");
-  sqlite.pragma("temp_store = MEMORY");
-  sqlite.pragma("mmap_size = 268435456");
-  return drizzle(sqlite, { schema });
-}
-
-export const db = globalForDb.db ?? createDb();
-
-if (process.env.NODE_ENV !== "production") globalForDb.db = db;
+export const db = drizzle(sql, { schema });

@@ -15,24 +15,20 @@ export async function POST(
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 });
   }
 
-  const video = db.select().from(videos).where(eq(videos.id, videoId)).get();
-  if (!video) {
+  const videoRows = await db.select().from(videos).where(eq(videos.id, videoId)).limit(1);
+  if (!videoRows[0]) {
     return NextResponse.json({ error: "Video not found" }, { status: 404 });
   }
 
-  const existing = db
-    .select()
-    .from(transcripts)
-    .where(eq(transcripts.videoId, videoId))
-    .get();
-  if (existing) {
+  const existingRows = await db.select().from(transcripts).where(eq(transcripts.videoId, videoId)).limit(1);
+  if (existingRows[0]) {
     return NextResponse.json({
       message: "Transcript already exists",
-      source: existing.source,
+      source: existingRows[0].source,
     });
   }
 
-  const transcript = await fetchTranscriptWithFallback(video.youtubeId);
+  const transcript = await fetchTranscriptWithFallback(videoRows[0].youtubeId);
 
   if (!transcript || transcript.segments.length === 0) {
     return NextResponse.json(
@@ -41,14 +37,12 @@ export async function POST(
     );
   }
 
-  db.insert(transcripts)
-    .values({
-      videoId,
-      segments: JSON.stringify(transcript.segments),
-      language: transcript.language,
-      source: transcript.source,
-    })
-    .run();
+  await db.insert(transcripts).values({
+    videoId,
+    segments: JSON.stringify(transcript.segments),
+    language: transcript.language,
+    source: transcript.source,
+  });
 
   return NextResponse.json({
     source: transcript.source,

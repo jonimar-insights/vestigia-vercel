@@ -1,11 +1,7 @@
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { db } from "../lib/db";
 import { users } from "../lib/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import Database from "better-sqlite3";
-
-const sqlite = new Database("data/app.db");
-const db = drizzle(sqlite);
 
 const args = process.argv.slice(2);
 const username = args[0];
@@ -19,12 +15,12 @@ if (!username || !password) {
   process.exit(1);
 }
 
-const existing = db.select().from(users).where(eq(users.username, username)).get();
-if (existing) {
+const existing = await db.select().from(users).where(eq(users.username, username)).limit(1);
+if (existing[0]) {
   console.log(`User '${username}' already exists`);
   process.exit(1);
 }
 
 const hash = bcrypt.hashSync(password, 10);
-db.insert(users).values({ username, passwordHash: hash, name, role }).run();
+await db.insert(users).values({ username, passwordHash: hash, name, role });
 console.log(`Created user '${username}' (role: ${role})`);

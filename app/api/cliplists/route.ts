@@ -1,24 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { cliplists, clipItems } from "@/lib/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, count } from "drizzle-orm";
 
 export async function GET() {
-  const lists = db
+  const lists = await db
     .select()
     .from(cliplists)
-    .orderBy(desc(cliplists.updatedAt))
-    .all();
+    .orderBy(desc(cliplists.updatedAt));
 
   // Attach item count to each list
-  const result = lists.map((list) => {
-    const count = db
-      .select({ id: clipItems.id })
-      .from(clipItems)
-      .where(eq(clipItems.cliplistId, list.id))
-      .all().length;
-    return { ...list, itemCount: count };
-  });
+  const result = await Promise.all(
+    lists.map(async (list) => {
+      const [{ value: itemCount }] = await db
+        .select({ value: count() })
+        .from(clipItems)
+        .where(eq(clipItems.cliplistId, list.id));
+      return { ...list, itemCount };
+    }),
+  );
 
   return NextResponse.json(result);
 }
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date().toISOString();
-  const result = db
+  const [result] = await db
     .insert(cliplists)
     .values({
       name: name.trim(),
@@ -40,8 +40,7 @@ export async function POST(request: NextRequest) {
       createdAt: now,
       updatedAt: now,
     })
-    .returning()
-    .get();
+    .returning();
 
   return NextResponse.json(result, { status: 201 });
 }

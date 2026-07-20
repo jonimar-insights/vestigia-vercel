@@ -14,8 +14,8 @@ export async function POST(
   }
 
   // Verify cliplist exists
-  const list = db.select().from(cliplists).where(eq(cliplists.id, listId)).get();
-  if (!list) {
+  const listRows = await db.select().from(cliplists).where(eq(cliplists.id, listId)).limit(1);
+  if (!listRows[0]) {
     return NextResponse.json({ error: "Cliplist not found" }, { status: 404 });
   }
 
@@ -26,7 +26,7 @@ export async function POST(
     return NextResponse.json({ error: "Missing required fields: type, videoId, timestamp, title" }, { status: 400 });
   }
 
-  const result = db
+  const [result] = await db
     .insert(clipItems)
     .values({
       cliplistId: listId,
@@ -38,14 +38,12 @@ export async function POST(
       detail: detail || null,
       tags: tags ? JSON.stringify(tags) : null,
     })
-    .returning()
-    .get();
+    .returning();
 
   // Update cliplist's updatedAt
-  db.update(cliplists)
+  await db.update(cliplists)
     .set({ updatedAt: new Date().toISOString() })
-    .where(eq(cliplists.id, listId))
-    .run();
+    .where(eq(cliplists.id, listId));
 
   return NextResponse.json(result, { status: 201 });
 }
@@ -67,15 +65,13 @@ export async function DELETE(
     return NextResponse.json({ error: "itemId is required" }, { status: 400 });
   }
 
-  db.delete(clipItems)
-    .where(and(eq(clipItems.id, itemId), eq(clipItems.cliplistId, listId)))
-    .run();
+  await db.delete(clipItems)
+    .where(and(eq(clipItems.id, itemId), eq(clipItems.cliplistId, listId)));
 
   // Update cliplist's updatedAt
-  db.update(cliplists)
+  await db.update(cliplists)
     .set({ updatedAt: new Date().toISOString() })
-    .where(eq(cliplists.id, listId))
-    .run();
+    .where(eq(cliplists.id, listId));
 
   return NextResponse.json({ success: true });
 }

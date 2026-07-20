@@ -15,17 +15,17 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 });
   }
 
-  const video = db.select().from(videos).where(eq(videos.id, videoId)).get();
-  if (!video) {
+  const videoRows = await db.select().from(videos).where(eq(videos.id, videoId)).limit(1);
+  if (!videoRows[0]) {
     return NextResponse.json({ error: "Video not found" }, { status: 404 });
   }
+  const video = videoRows[0];
 
-  const videoAnnotations = db
+  const videoAnnotations = await db
     .select()
     .from(annotations)
     .where(eq(annotations.videoId, videoId))
-    .orderBy(annotations.timestampStart)
-    .all();
+    .orderBy(annotations.timestampStart);
 
   const format = request.nextUrl.searchParams.get("format") ?? "chapters";
 
