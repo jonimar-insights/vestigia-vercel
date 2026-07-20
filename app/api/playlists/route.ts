@@ -48,6 +48,7 @@ async function fetchPlaylistViaYtdlp(playlistUrl: string): Promise<PlaylistVideo
 
 async function fetchPlaylistViaRSS(playlistId: string): Promise<PlaylistVideo[]> {
   const videos: PlaylistVideo[] = [];
+  const seen = new Set<string>();
   let startIndex = 1;
 
   for (let page = 0; page < 40; page++) {
@@ -59,22 +60,25 @@ async function fetchPlaylistViaRSS(playlistId: string): Promise<PlaylistVideo[]>
     const entries = xml.split("<entry>").slice(1);
     if (entries.length === 0) break;
 
+    let newCount = 0;
     for (const entry of entries) {
       const idMatch = entry.match(/<yt:videoId>(.*?)<\/yt:videoId>/);
       const titleMatch = entry.match(/<media:group>[\s\S]*?<media:title>(.*?)<\/media:title>/);
       const thumbMatch = entry.match(/<media:thumbnail url="(.*?)"/);
 
-      if (idMatch) {
+      if (idMatch && !seen.has(idMatch[1])) {
+        seen.add(idMatch[1]);
         videos.push({
           id: idMatch[1],
           title: titleMatch?.[1]?.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">") ?? "Untitled",
           thumbnail: thumbMatch?.[1] ?? `https://i.ytimg.com/vi/${idMatch[1]}/hqdefault.jpg`,
           position: videos.length,
         });
+        newCount++;
       }
     }
 
-    if (entries.length < 15) break;
+    if (newCount === 0) break;
     startIndex += entries.length;
   }
 
