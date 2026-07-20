@@ -28,13 +28,15 @@ export async function GET() {
     }
   }
 
-  // Also test lib
-  try {
-    const { fetchTranscript } = await import("youtube-transcript");
-    const r = await fetchTranscript("dQw4w9WgXcQ");
-    results.libTest = { ok: true, segments: r.length };
-  } catch (e: unknown) {
-    results.libTest = { error: e instanceof Error ? e.message : String(e) };
+  // Test all with library
+  const { fetchTranscript } = await import("youtube-transcript");
+  for (const youtubeId of testIds) {
+    try {
+      const r = await fetchTranscript(youtubeId);
+      results[`lib_${youtubeId}`] = { ok: true, segments: r.length, sample: r[0]?.text };
+    } catch (e: unknown) {
+      results[`lib_${youtubeId}`] = { error: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   const pkg = await import("youtube-transcript/package.json", { with: { type: "json" } }).catch(() => null);
