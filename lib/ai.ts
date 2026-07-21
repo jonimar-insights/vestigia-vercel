@@ -32,6 +32,18 @@ const providers: ProviderConfig[] = [
     model: "llama-3.3-70b-versatile",
   },
   {
+    name: "Claude",
+    baseUrl: "https://api.anthropic.com/v1",
+    apiKey: process.env.CLAUDE_API_KEY || "",
+    model: "claude-sonnet-4-20250514",
+  },
+  {
+    name: "GPT",
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: process.env.OPENAI_API_KEY || "",
+    model: "gpt-4.1",
+  },
+  {
     name: "Gemini",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     apiKey: process.env.GEMINI_API_KEY || "",
@@ -67,19 +79,52 @@ async function callProvider(
   provider: ProviderConfig,
   options: ChatOptions,
 ): Promise<{ text: string; provider: string }> {
-  const res = await fetch(`${provider.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${provider.apiKey}`,
-    },
-    body: JSON.stringify({
+  let url = `${provider.baseUrl}/chat/completions`;
+  let headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  let body: Record<string, unknown>;
+
+  if (provider.name === "Claude") {
+    url = `${provider.baseUrl}/messages`;
+    headers["x-api-key"] = provider.apiKey;
+    headers["anthropic-version"] = "2023-06-01";
+
+    let systemMsg = "";
+    const messages = [];
+    for (const m of options.messages) {
+      if (m.role === "system") {
+        systemMsg = typeof m.content === "string" ? m.content : "";
+      } else {
+        messages.push({
+          role: m.role,
+          content: typeof m.content === "string" ? m.content : "",
+        });
+      }
+    }
+
+    body = {
+      model: provider.model,
+      system: systemMsg || undefined,
+      messages,
+      temperature: options.temperature ?? 0.3,
+      max_tokens: options.maxTokens ?? provider.maxTokens ?? 4096,
+    };
+  } else {
+    headers["Authorization"] = `Bearer ${provider.apiKey}`;
+    body = {
       model: provider.model,
       stream: false,
       messages: options.messages,
       temperature: options.temperature ?? 0.3,
       max_tokens: options.maxTokens ?? provider.maxTokens ?? 4096,
-    }),
+    };
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
   });
 
   const raw = await res.text();
@@ -91,9 +136,12 @@ async function callProvider(
   let text = "";
   try {
     const obj = JSON.parse(raw);
-    text = obj.choices?.[0]?.message?.content ?? "";
+    if (provider.name === "Claude") {
+      text = obj.content?.[0]?.text ?? "";
+    } else {
+      text = obj.choices?.[0]?.message?.content ?? "";
+    }
   } catch {
-    // SSE fallback
     const lines = raw.split("\n");
     for (const line of lines) {
       if (!line.startsWith("data: ")) continue;
@@ -162,17 +210,34 @@ export async function checkAIProvider(): Promise<{ available: boolean; provider:
 
   for (const provider of available) {
     try {
-      const res = await fetch(`${provider.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${provider.apiKey}`,
-        },
-        body: JSON.stringify({
+      let url = `${provider.baseUrl}/chat/completions`;
+      let headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      let body: Record<string, unknown>;
+
+      if (provider.name === "Claude") {
+        url = `${provider.baseUrl}/messages`;
+        headers["x-api-key"] = provider.apiKey;
+        headers["anthropic-version"] = "2023-06-01";
+        body = {
           model: provider.model,
           messages: [{ role: "user", content: "Say OK" }],
           max_tokens: 5,
-        }),
+        };
+      } else {
+        headers["Authorization"] = `Bearer ${provider.apiKey}`;
+        body = {
+          model: provider.model,
+          messages: [{ role: "user", content: "Say OK" }],
+          max_tokens: 5,
+        };
+      }
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         return { available: true, provider: provider.name };
