@@ -121,7 +121,7 @@ export const keyMoments = pgTable("key_moments", {
   endTimestamp: real("end_timestamp"),
   title: text("title").notNull(),
   description: text("description"),
-  source: text("source").notNull(), // chapter | storyboard | transcript
+  source: text("source").notNull(), // chapter | storyboard | transcript | ai
   thumbnailUrl: text("thumbnail_url"),
   confidence: real("confidence").notNull().default(0.5),
   createdAt: text("created_at")

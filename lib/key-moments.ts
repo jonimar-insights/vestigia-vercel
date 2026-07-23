@@ -54,10 +54,15 @@ export async function extractYouTubeChapters(
                     chapter.title?.simpleText ||
                     chapter.title?.runs?.[0]?.text ||
                     "";
+                  const startSeconds =
+                    chapter.onTap?.watchEndpoint?.startTimeSeconds;
                   const timeMs =
-                    chapter.timeRangeStartMillis ||
-                    chapter.onTap?.watchEndpoint?.startTimeSeconds * 1000;
-                  if (title && timeMs != null) {
+                    chapter.timeRangeStartMillis != null
+                      ? chapter.timeRangeStartMillis
+                      : startSeconds != null
+                        ? startSeconds * 1000
+                        : null;
+                  if (title && timeMs != null && !isNaN(timeMs)) {
                     chapters.push({
                       timestamp: timeMs / 1000,
                       title,
@@ -70,21 +75,25 @@ export async function extractYouTubeChapters(
             }
           }
         }
-      } catch {}
+      } catch (e) {
+        console.warn("Failed to parse ytInitialData chapters:", e);
+      }
     }
 
     // Fallback: parse chapters from description
     if (chapters.length === 0) {
+      // Use a character class that stops at an unescaped double quote
       const descMatch = html.match(
-        /"shortDescription":"([\s\S]*?)"(?:,|})/,
+        /"shortDescription":"((?:[^"\\]|\\.)*)"/,
       );
       if (descMatch) {
         const desc = descMatch[1]
           .replace(/\\n/g, "\n")
           .replace(/\\"/g, '"')
           .replace(/\\\\/g, "\\");
+        // Only match timestamps at the start of a line (actual chapter markers)
         const chapterRegex =
-          /(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)/g;
+          /^(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)/gm;
         let match;
         while ((match = chapterRegex.exec(desc)) !== null) {
           const timeParts = match[1].split(":").map(Number);
@@ -147,13 +156,41 @@ export async function extractStoryboards(
     const perSheet = cols * rows;
     const totalFrames = parseInt(params.get("n") || "100");
 
-    const durationRes = await fetch(
-      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${youtubeId}&format=json`,
-    );
-    let duration = 600;
-    if (durationRes.ok) {
-      await durationRes.json();
-      duration = 600;
+    // Try to get actual duration from multiple sources
+    let duration = 600; // fallback default
+    try {
+      // Attempt 1: oEmbed
+      const durationRes = await fetch(
+        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${youtubeId}&format=json`,
+      );
+      if (durationRes.ok) {
+        const oembedData = await durationRes.json();
+        if (oembedData.duration && typeof oembedData.duration === "number") {
+          duration = oembedData.duration;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch duration from oEmbed:", e);
+    }
+
+    // Attempt 2: if oEmbed didn't give us duration, scrape the video page
+    if (duration === 600) {
+      try {
+        const pageRes = await fetch(`https://www.youtube.com/watch?v=${youtubeId}`);
+        const html = await pageRes.text();
+        const dataMatch = html.match(/var ytInitialData = ([\s\S]*?);<\/script>/);
+        if (dataMatch) {
+          const data = JSON.parse(dataMatch[1]);
+          const lengthSeconds =
+            data?.videoDetails?.lengthSeconds ||
+            data?.playerOverlays?.playerOverlayRenderer?.lengthSeconds;
+          if (lengthSeconds) {
+            duration = parseInt(lengthSeconds);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to fetch duration from page scrape:", e);
+      }
     }
 
     const frameInterval = duration / totalFrames;
@@ -195,8 +232,8 @@ export async function extractTranscriptKeyMoments(
       const prevEnd = segments[i - 1].start + segments[i - 1].duration;
       const gap = segments[i].start - prevEnd;
 
-      if (gap > 1.5) {
-        // Significant pause
+      if (gap > 3.0) {
+        // Significant pause (3s+ indicates a genuine structural break)
         const precedingText = segments
           .slice(Math.max(0, i - 3), i)
           .map((s) => s.text)
@@ -204,7 +241,7 @@ export async function extractTranscriptKeyMoments(
 
         const title =
           precedingText.length > 60
-            ? precedingText.slice(-60).trim() + "..."
+            ? precedingText.slice(0, 60).trim() + "..."
             : precedingText.trim();
 
         if (title.length > 5) {
@@ -373,7 +410,7 @@ async function fetchVideoMetadata(
     const titleMatch = html.match(/<title>([^<]*)<\/title>/);
     const title = titleMatch ? titleMatch[1].replace(" - YouTube", "").trim() : "";
 
-    const descMatch = html.match(/"shortDescription":"([\s\S]*?)"(?:,|})/);
+    const descMatch = html.match(/"shortDescription":"((?:[^"\\]|\\.)*)"/);
     const description = descMatch
       ? descMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\")
       : "";
@@ -388,7 +425,9 @@ async function fetchVideoMetadata(
         if (lengthSeconds) {
           duration = parseInt(lengthSeconds);
         }
-      } catch {}
+      } catch (e) {
+        console.warn("Failed to parse ytInitialData duration:", e);
+      }
     }
 
     return {
@@ -453,6 +492,7 @@ const CATEGORY_MAP: Record<string, string> = {
 
 export async function extractAIKeyMoments(
   youtubeId: string,
+  transcriptSegments?: { start: number; duration: number; text: string }[],
   userKeys?: Record<string, string>,
   preferred?: string | null,
 ): Promise<KeyMoment[]> {
@@ -481,6 +521,19 @@ ${descriptionChapters.map((c) => `  [${c.timestamp}s] ${c.title}`).join("\n")}
 `;
   }
 
+  // Include transcript excerpts so the AI can pinpoint real topic breaks
+  let transcriptSection = "";
+  if (transcriptSegments && transcriptSegments.length > 0) {
+    // Sample ~30 evenly-spaced segments to stay within token limits
+    const sample = transcriptSegments.length <= 30
+      ? transcriptSegments
+      : transcriptSegments.filter((_, i) => i % Math.ceil(transcriptSegments.length / 30) === 0);
+    transcriptSection = `
+TRANSCRIPT EXCERPTS (sampled evenly across the video):
+${sample.map((s) => `  [${Math.floor(s.start)}s] ${s.text}`).join("\n")}
+`;
+  }
+
   const prompt = `You are an expert video analyst. Your task is to identify the key moments in this YouTube video.
 
 VIDEO METADATA:
@@ -493,10 +546,10 @@ VIDEO METADATA:
 ${chapterSection}
 VIDEO DESCRIPTION:
 ${descPreview}
-
+${transcriptSection}
 INSTRUCTIONS:
-1. Analyze the title, channel, category, tags, and description to understand the video's content.
-${hasDescriptionChapters ? "2. Use the description chapters as a starting point, then expand each into more specific sub-moments with precise timestamps." : "2. Infer the video's structure from the title and description. Educational videos typically follow: intro → topic 1 → topic 2 → ... → conclusion."}
+1. Analyze the title, channel, category, tags, description, and transcript to understand the video's content.
+${hasDescriptionChapters ? "2. Use the description chapters as a starting point, then expand each into more specific sub-moments with precise timestamps." : "2. Infer the video's structure from the title, description, and transcript. Educational videos typically follow: intro → topic 1 → topic 2 → ... → conclusion."}
 3. For each moment, provide:
    - timestamp: start time in SECONDS (must be between 0 and ${meta.duration})
    - title: concise descriptive title (max 60 chars, start with a verb or noun, be specific)
@@ -505,6 +558,7 @@ ${hasDescriptionChapters ? "2. Use the description chapters as a starting point,
 4. Spread moments across the full duration. Don't cluster them all in the first half.
 5. For educational content: identify concept introductions, worked examples, key derivations, important results, and demonstrations.
 6. For entertainment: identify plot points, climax moments, transitions, and highlights.
+7. Use the transcript excerpts to precisely timestamp moments where topic shifts actually occur.
 
 Return ONLY a JSON array. No other text. Example format:
 [{"timestamp":0,"title":"Introduction","description":"Opening remarks","confidence":0.8}]`;
@@ -523,7 +577,11 @@ Return ONLY a JSON array. No other text. Example format:
     }, userKeys, preferred);
 
     const text = result.text;
-    const jsonMatch = text.match(/\[[\s\S]*?\]/);
+
+    // Strip markdown code fences if present (some models return ```json ... ```)
+    const stripped = text.replace(/```(?:json)?\s*\n?([\s\S]*?)\n?```/g, "$1").trim();
+
+    const jsonMatch = stripped.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return [];
 
     let parsed: Array<{

@@ -118,7 +118,7 @@ export async function POST(
     preferred = settings.preferredProvider ?? null;
   }
 
-  const aiMoments = await extractAIKeyMoments(video.youtubeId, userKeys, preferred);
+  const aiMoments = await extractAIKeyMoments(video.youtubeId, transcriptSegments, userKeys, preferred);
   for (const am of aiMoments) {
     const tooClose = allMoments.some(
       (m) => Math.abs(m.timestamp - am.timestamp) < 3,
