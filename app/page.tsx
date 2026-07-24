@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 
@@ -886,7 +887,7 @@ export default function Home() {
     }
   }
 
-  async function addToCliplist(cliplistId: number, result: SearchResult, index: number) {
+  async function addToCliplist(cliplistId: number, result: SearchResult) {
     try {
       await fetch(`/api/cliplists/${cliplistId}/items`, {
         method: "POST",
@@ -1192,11 +1193,14 @@ export default function Home() {
                               onChange={() => togglePlaylistVideo(v.id)}
                               className="rounded border-border accent-accent shrink-0"
                             />
-                            <img
-                              src={v.thumbnail}
-                              alt={v.title}
-                              className="w-24 h-14 object-cover rounded shrink-0"
-                            />
+                            <div className="relative w-24 h-14 shrink-0">
+                              <Image
+                                src={v.thumbnail}
+                                alt={v.title}
+                                fill
+                                className="object-cover rounded"
+                              />
+                            </div>
                             <div className="flex-1 min-w-0">
                               <span className="text-xs text-foreground line-clamp-2">{v.title}</span>
                               {alreadyImported && (
@@ -1252,7 +1256,7 @@ export default function Home() {
                     >
                       {video.thumbnailUrl && (
                         <div className="aspect-video w-full overflow-hidden bg-muted relative">
-                          <img src={video.thumbnailUrl} alt={video.title ?? "Video"} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                          <Image src={video.thumbnailUrl} alt={video.title ?? "Video"} fill className="object-cover group-hover:scale-105 transition-transform duration-300" />
                           <button
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleVideoSelection(video.id); }}
                             className="absolute top-2 left-2 w-5 h-5 rounded border border-white/40 bg-black/30 backdrop-blur-sm flex items-center justify-center transition-colors hover:bg-black/50"
@@ -1337,10 +1341,11 @@ export default function Home() {
                   >
                     {video.thumbnailUrl && (
                       <div className="aspect-video w-full overflow-hidden bg-muted relative">
-                        <img
+                        <Image
                           src={video.thumbnailUrl}
                           alt={video.title ?? "Video"}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          fill
+                          className="object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                         <button
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleVideoSelection(video.id); }}
@@ -1484,8 +1489,8 @@ export default function Home() {
                       className="flex items-center gap-4 flex-1 min-w-0"
                     >
                       {r.videoThumbnail && (
-                        <div className="relative shrink-0">
-                          <img src={r.videoThumbnail} alt="" className="w-28 h-16 object-cover rounded" />
+                        <div className="relative shrink-0 w-28 h-16">
+                          <Image src={r.videoThumbnail} alt="" fill className="object-cover rounded" />
                           <span className="absolute bottom-1 right-1 text-[10px] bg-black/75 text-white px-1 py-0.5 rounded">
                             {formatTs(r.timestamp)}
                           </span>
@@ -1550,7 +1555,7 @@ export default function Home() {
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  addToCliplist(cl.id, r, i);
+                                  addToCliplist(cl.id, r);
                                 }}
                                 className="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-hover transition-colors flex items-center justify-between"
                               >
@@ -1693,8 +1698,8 @@ export default function Home() {
                       {selectedCliplist.items.map((item) => (
                         <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-hover/50 transition-colors group/item">
                           {item.videoThumbnail && (
-                            <div className="relative shrink-0">
-                              <img src={item.videoThumbnail} alt="" className="w-20 h-12 object-cover rounded" />
+                            <div className="relative shrink-0 w-20 h-12">
+                              <Image src={item.videoThumbnail} alt="" fill className="object-cover rounded" />
                               <span className="absolute bottom-0.5 right-0.5 text-[8px] bg-black/75 text-white px-0.5 rounded">
                                 {formatTs(item.timestamp)}
                               </span>
